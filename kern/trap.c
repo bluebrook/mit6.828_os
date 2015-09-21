@@ -25,11 +25,14 @@ static struct Trapframe *last_tf;
 /* Interrupt descriptor table.  (Must be built at run time because
  * shifted function addresses can't be represented in relocation records.)
  */
+extern uint32_t vectors[];
 struct Gatedesc idt[256] = { { 0 } };
 struct Pseudodesc idt_pd = {
 	sizeof(idt) - 1, (uint32_t) idt
 };
 
+void breakpoint_handler(struct Trapframe *tf);
+void syscall_handler(struct Trapframe *tf);
 
 static const char *trapname(int trapno)
 {
@@ -70,10 +73,17 @@ void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
-
 	// LAB 3: Your code here.
+	int i;
+	for(i = 0; i < 256; i++){
+		if (i==T_BRKPT || i == T_SYSCALL){
+			// allow user to set breakpoint
+			SETGATE(idt[i], 0, GD_KT, vectors[i], 3);
+			continue;
+		}
+		SETGATE(idt[i], 0, GD_KT, vectors[i], 0);
 
-	// Per-CPU setup 
+	}// Per-CPU setup
 	trap_init_percpu();
 }
 
@@ -188,12 +198,28 @@ trap_dispatch(struct Trapframe *tf)
 	// LAB 4: Your code here.
 
 	// Unexpected trap: The user process or the kernel has a bug.
-	print_trapframe(tf);
-	if (tf->tf_cs == GD_KT)
-		panic("unhandled trap in kernel");
-	else {
-		env_destroy(curenv);
-		return;
+	//tf->tf_trapno = 3;
+	switch(tf->tf_trapno){
+		case T_BRKPT:
+			breakpoint_handler(tf);
+			break;
+		case T_PGFLT:
+			if (tf->tf_cs == GD_KT)
+				panic("unhandled trap in kernel");
+			page_fault_handler(tf);
+			break;
+		case T_SYSCALL:
+			syscall_handler(tf);
+			break;
+		default:
+			print_trapframe(tf);
+			if (tf->tf_cs == GD_KT)
+				panic("unhandled trap in kernel");
+			else {
+				env_destroy(curenv);
+				return;
+			}
+			break;
 	}
 }
 
@@ -257,6 +283,25 @@ trap(struct Trapframe *tf)
 }
 
 
+void syscall_handler(struct Trapframe *tf)
+{
+	print_trapframe(tf);
+	uint32_t syscallno = tf->tf_regs.reg_eax;
+	uint32_t a1 = tf->tf_regs.reg_edx;
+	uint32_t a2 = tf->tf_regs.reg_ecx;
+	uint32_t a3 = tf->tf_regs.reg_ebx;
+	uint32_t a4 = tf->tf_regs.reg_edi;
+	uint32_t a5 = tf->tf_regs.reg_esi;
+	tf->tf_regs.reg_eax = syscall(syscallno, a1, a2, a3, a4, a5);
+
+}
+
+void
+breakpoint_handler(struct Trapframe *tf)
+{
+	monitor(tf);
+	return;
+}
 void
 page_fault_handler(struct Trapframe *tf)
 {
