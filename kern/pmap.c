@@ -218,7 +218,7 @@ mem_init(void)
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
 	boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE,
-			PTSIZE, PADDR(bootstack), PTE_W|PTE_U
+			PTSIZE, PADDR(bootstack), PTE_W|PTE_P
 			);
 
 	//////////////////////////////////////////////////////////////////////
@@ -231,7 +231,7 @@ mem_init(void)
 	// Your code goes here:
 
 	size_t MAX = 0xffffffff;
-	boot_map_region(kern_pgdir, KERNBASE, (MAX-KERNBASE), (physaddr_t) 0x0, PTE_W|PTE_U);
+	boot_map_region(kern_pgdir, KERNBASE, (MAX-KERNBASE), (physaddr_t) 0x0, PTE_W|PTE_P);
 
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
@@ -651,6 +651,22 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
+	pte_t * upgdir = env->env_pgdir;
+
+
+	size_t i;
+	for(i= 0;i <= ROUNDUP(va+len, PGSIZE)-va; i += PGSIZE)
+	{
+		if (i==0)
+			user_mem_check_addr = (uint32_t)(va+i);
+		else
+			user_mem_check_addr = ROUNDDOWN((uint32_t)(va+i), PGSIZE);
+		if ((va + i) >= (void*) ULIM && i <= len)
+			return -1;
+		pte_t *ptep = pgdir_walk(upgdir, va+i, 0);
+		if (!ptep || (*ptep & perm)!= perm )
+			return -1;
+	}
 
 	return 0;
 }

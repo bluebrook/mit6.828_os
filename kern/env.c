@@ -375,8 +375,14 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 	{
 		if(ph->p_type != ELF_PROG_LOAD)
 			continue;
+
+		if (ph->p_filesz > ph->p_memsz)
+		{
+			panic ("ph->p_filesz > ph->p_memsz\n");
+			return;
+		}
 		region_alloc(e, (void *) ph->p_va, ph->p_memsz);
-		memmove((void *)ph->p_va, (void *)(binary+ph->p_offset), ph->p_memsz);
+		memmove((void *)ph->p_va, (void *)(binary+ph->p_offset), ph->p_filesz);
 		memset ((void *) (ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
 	}
 	// Now map one page for the program's initial stack
@@ -523,7 +529,6 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
-	cprintf("I am there\n");
 	if (curenv && curenv->env_status == ENV_RUNNING)
 		curenv->env_status = ENV_RUNNABLE;
 	curenv = e;
@@ -532,7 +537,6 @@ env_run(struct Env *e)
 
 	lcr3(PADDR(curenv->env_pgdir));
 
-	cprintf("I am here2\n");
 	env_pop_tf(&(curenv->env_tf));
 	//panic("env_run not yet implemented");
 	cprintf("I am here3\n");
