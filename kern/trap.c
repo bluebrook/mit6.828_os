@@ -113,23 +113,36 @@ trap_init_percpu(void)
 	// user space on that CPU.
 	//
 	// LAB 4: Your code here:
-
-	// Setup a TSS so that we get the right stack
-	// when we trap to the kernel.
-	ts.ts_esp0 = KSTACKTOP;
-	ts.ts_ss0 = GD_KD;
+	assert(thiscpu->cpu_id == cpunum());
+	size_t i = cpunum();
+	cpus[i].cpu_ts.ts_esp0 = KSTACKTOP-i*(KSTKSIZE+KSTKGAP);
+	cpus[i].cpu_ts.ts_ss0 = GD_KD;
 
 	// Initialize the TSS slot of the gdt.
-	gdt[GD_TSS0 >> 3] = SEG16(STS_T32A, (uint32_t) (&ts),
-					sizeof(struct Taskstate), 0);
-	gdt[GD_TSS0 >> 3].sd_s = 0;
+	gdt[(GD_TSS0 >> 3)+i] = SEG16(STS_T32A, (uint32_t) (&cpus[i].cpu_ts),
+						sizeof(struct Taskstate), 0);
+	gdt[(GD_TSS0 >> 3)+i].sd_s = 0;
 
 	// Load the TSS selector (like other segment selectors, the
 	// bottom three bits are special; we leave them 0)
-	ltr(GD_TSS0);
-
+	ltr(GD_TSS0+8*i);
 	// Load the IDT
 	lidt(&idt_pd);
+
+
+	/*
+	ts.ts_esp0 = KSTACKTOP;
+	ts.ts_ss0 = GD_KD;
+	// Initialize the TSS slot of the gdt.
+	gdt[GD_TSS0 >> 3] = SEG16(STS_T32A, (uint32_t) (&ts),
+	sizeof(struct Taskstate), 0);
+	gdt[GD_TSS0 >> 3].sd_s = 0;
+	// Load the TSS selector (like other segment selectors, the
+	// bottom three bits are special; we leave them 0)
+	ltr(GD_TSS0);
+	// Load the IDT
+	lidt(&idt_pd);
+	*/
 }
 
 void
@@ -199,13 +212,12 @@ trap_dispatch(struct Trapframe *tf)
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	//tf->tf_trapno = 3;
+
 	switch(tf->tf_trapno){
 		case T_BRKPT:
 			breakpoint_handler(tf);
 			break;
 		case T_PGFLT:
-			if (tf->tf_cs == GD_KT)
-				panic("unhandled trap in kernel");
 			page_fault_handler(tf);
 			break;
 		case T_SYSCALL:
@@ -214,7 +226,7 @@ trap_dispatch(struct Trapframe *tf)
 		default:
 			print_trapframe(tf);
 			if (tf->tf_cs == GD_KT)
-				panic("unhandled trap in kernel");
+				panic("unhandled trap in kernel\n");
 			else {
 				env_destroy(curenv);
 				return;
@@ -249,6 +261,7 @@ trap(struct Trapframe *tf)
 		// Acquire the big kernel lock before doing any
 		// serious kernel work.
 		// LAB 4: Your code here.
+		lock_kernel();
 		assert(curenv);
 
 		// Garbage collect if current enviroment is a zombie
@@ -285,7 +298,7 @@ trap(struct Trapframe *tf)
 
 void syscall_handler(struct Trapframe *tf)
 {
-	print_trapframe(tf);
+	//print_trapframe(tf);
 	uint32_t syscallno = tf->tf_regs.reg_eax;
 	uint32_t a1 = tf->tf_regs.reg_edx;
 	uint32_t a2 = tf->tf_regs.reg_ecx;
@@ -309,10 +322,10 @@ page_fault_handler(struct Trapframe *tf)
 
 	// Read processor's CR2 register to find the faulting address
 	fault_va = rcr2();
-
 	// Handle kernel-mode page faults.
-
 	// LAB 3: Your code here.
+	if (tf->tf_cs == GD_KT)
+		panic("unhandled page fault in kernel");
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.

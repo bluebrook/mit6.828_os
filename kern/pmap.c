@@ -219,9 +219,9 @@ mem_init(void)
 	//       overwrite memory.  Known as a "guard page".
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
-	boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE,
-			PTSIZE, PADDR(bootstack), PTE_W|PTE_P
-			);
+	//boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE,
+	//		PTSIZE, PADDR(bootstack), PTE_W|PTE_P
+	//		);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
@@ -285,7 +285,12 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-
+	size_t i;
+	for(i=0; i< NCPU; i++){
+		boot_map_region(kern_pgdir, KSTACKTOP-i*(KSTKSIZE+KSTKGAP)-KSTKSIZE,
+				KSTKSIZE, PADDR(percpu_kstacks[i]), PTE_W|PTE_P
+				);
+	}
 }
 
 void show_pages()
@@ -364,7 +369,6 @@ page_init(void)
 
 	// io hole [IOPHYSMEM,EXTPHYSMEM]
 	// kernel [EXTPHYSMEM, LAST PAGE FROM boot_alloc
-
 	physaddr_t next_kernel_mem = PADDR(boot_alloc(0));
 
 	size_t i = 1;
@@ -375,6 +379,11 @@ page_init(void)
 
 	pages[npages-1].pp_ref = 0;
 	pages[npages-1].pp_link = NULL;
+
+	// need exclude mpentry_paddr physical memory page
+	size_t mp_page_no = MPENTRY_PADDR/PGSIZE;
+	pages[mp_page_no].pp_link = NULL;
+	pages[mp_page_no-1].pp_link = pages+mp_page_no+1;
 
 	for (i=PGNUM(IOPHYSMEM)-1;i <= PGNUM(next_kernel_mem); i++)
 	{
@@ -692,7 +701,15 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	uintptr_t resv_base = base;
+
+	size = ROUNDUP(size, PGSIZE);
+
+	if(base+size > MMIOLIM)
+		panic("The reserved MMIO virtual address exceed MMIOLIM");
+	boot_map_region(kern_pgdir, base, size, pa, PTE_W|PTE_PCD|PTE_PWT|PTE_P);
+	base += size;
+	return (void *) resv_base;
 }
 
 static uintptr_t user_mem_check_addr;

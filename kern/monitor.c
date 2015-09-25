@@ -58,36 +58,36 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 }
 
 #define EBP(_v) ((uint32_t)_v)
-#define EIP(_ebp) ( *(uint32_t *)(_ebp+1))
-#define ARG(_v,_cnt) ( *(uint32_t *)(_v+((_cnt)+2)))
+#define EIP(_ebp) ( (uint32_t)*(_ebp+1))
+#define ARG(_v,_cnt) ((uint32_t) *(_v+((_cnt)+2)))
 
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
-	uint32_t ebp = 0;
+	uint32_t *ebp = 0;
 	struct Eipdebuginfo info;
 	char * format_str1 = " ebp %08x eip %08x args %08x %08x %08x %08x %08x\n";
-	char * format_str2 = " 		%s:%d: %s+%d\n";
-	ebp = read_ebp();
+	char * format_str2 = " 		%s:%d: %.*s+%d\n";
+	ebp = (uint32_t *) read_ebp();
 
 	cprintf ("Stack backtrace\n");
+
 	for (; 0x0!= ebp;)
 	{
-	cprintf (format_str1, EBP (ebp), EIP (ebp), ARG (ebp, 0), ARG (ebp, 1),
-			ARG (ebp, 2), ARG (ebp, 3), ARG (ebp, 4));
+		cprintf (format_str1, EBP (ebp), EIP (ebp), ARG (ebp, 0), ARG (ebp, 1),
+				ARG (ebp, 2), ARG (ebp, 3), ARG (ebp, 4));
 
-	debuginfo_eip (EIP (ebp), &info);
-	cprintf (format_str2,
-			info.eip_file,
-			info.eip_line,
-			//info.eip_fn_namelen,
-			info.eip_fn_name, EIP (ebp) - info.eip_fn_addr);
+		debuginfo_eip (EIP(ebp), &info);
+		cprintf (format_str2,
+				info.eip_file,
+				info.eip_line,
+				info.eip_fn_namelen,
+				info.eip_fn_name, EIP (ebp) - info.eip_fn_addr);
 
-	//Trace the linked list implemented by Stack.
-	//dereference the ebp to the last ebp
-	ebp = *(uint32_t *)ebp;
+		//Trace the linked list implemented by Stack.
+		//dereference the ebp to the last ebp
+		ebp = (uint32_t *) *ebp;
 	}
-
 	return 0;
 }
 

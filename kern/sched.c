@@ -31,6 +31,26 @@ sched_yield(void)
 	// LAB 4: Your code here.
 
 	// sched_halt never returns
+	size_t i;
+	size_t offset = 0;
+	if (curenv)
+		offset = (curenv - envs)/sizeof(struct Env)+1;
+	struct Env * e, * e_running = NULL;
+	//cprintf("envs = %8x, curenv=%8x\n", envs, curenv);
+
+	for (i=0; i<NENV; i++){
+		e = envs+ (offset + i) % NENV;
+		//cprintf("loop i: %d, envs = %8x, e =%8x\n", i, envs, e);
+		if (e->env_status == ENV_RUNNABLE){
+			//cprintf("Found a runnable env %d\n", e->env_id);
+			env_run(e);
+			return;
+		}
+	}
+
+	if (curenv && curenv->env_status == ENV_RUNNING)
+		env_run(curenv);
+
 	sched_halt();
 }
 
