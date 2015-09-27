@@ -1,6 +1,7 @@
 #include <inc/mmu.h>
 #include <inc/x86.h>
 #include <inc/assert.h>
+#include <inc/string.h>
 
 #include <kern/pmap.h>
 #include <kern/trap.h>
@@ -13,6 +14,7 @@
 #include <kern/picirq.h>
 #include <kern/cpu.h>
 #include <kern/spinlock.h>
+
 
 static struct Taskstate ts;
 
@@ -324,6 +326,8 @@ page_fault_handler(struct Trapframe *tf)
 	fault_va = rcr2();
 	// Handle kernel-mode page faults.
 	// LAB 3: Your code here.
+	//print_trapframe(tf);
+
 	if (tf->tf_cs == GD_KT)
 		panic("unhandled page fault in kernel");
 
@@ -359,11 +363,44 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	if(!curenv->env_pgfault_upcall){
+		// Destroy the environment that caused the fault.
+		cprintf("[%08x] user fault va %08x ip %08x\n",
+			curenv->env_id, fault_va, tf->tf_eip);
+		print_trapframe(tf);
+		env_destroy(curenv);
+	}
 
-	// Destroy the environment that caused the fault.
-	cprintf("[%08x] user fault va %08x ip %08x\n",
-		curenv->env_id, fault_va, tf->tf_eip);
-	print_trapframe(tf);
-	env_destroy(curenv);
+	if (curenv->env_pgfault_upcall){
+		uint32_t stacktop;
+		struct UTrapframe* uxstack = NULL;
+		if ( tf->tf_esp < UXSTACKTOP && tf->tf_esp >= UXSTACKTOP-PGSIZE)
+		{
+			//memset((void *)(tf->tf_esp-2), 0, 2);
+			stacktop = tf->tf_esp-4;
+		}
+		else
+			stacktop = UXSTACKTOP;
+
+		// assert user has perm to write on exception stack
+		user_mem_assert(curenv, (const void *) (stacktop-sizeof(*uxstack)),
+						sizeof(*uxstack), PTE_W|PTE_U);
+
+		uxstack = (struct UTrapframe*) (stacktop-sizeof(*uxstack));
+
+		uxstack->utf_esp = tf->tf_esp;
+		uxstack->utf_eflags = tf->tf_eflags;
+		uxstack->utf_eip = tf->tf_eip;
+		memmove(&(uxstack->utf_regs), &(tf->tf_regs), sizeof(tf->tf_regs));
+		uxstack->utf_err = tf->tf_err;
+		uxstack->utf_fault_va = fault_va;
+
+		curenv->env_tf.tf_eip = (uint32_t) curenv->env_pgfault_upcall;
+		curenv->env_tf.tf_esp = (uint32_t) (uxstack);
+		//cprintf("modified tf\n");
+		//print_trapframe(tf);
+		//panic("");
+		env_run(curenv);
+	}
 }
 

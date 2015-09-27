@@ -222,7 +222,8 @@ mem_init(void)
 	//boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE,
 	//		PTSIZE, PADDR(bootstack), PTE_W|PTE_P
 	//		);
-
+	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE,
+					PADDR(bootstack), PTE_W|PTE_P);
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
 	// Ie.  the VA range [KERNBASE, 2^32) should map to
