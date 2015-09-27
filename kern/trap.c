@@ -1,6 +1,7 @@
 #include <inc/mmu.h>
 #include <inc/x86.h>
 #include <inc/assert.h>
+#include <inc/string.h>
 
 #include <kern/pmap.h>
 #include <kern/trap.h>
@@ -14,6 +15,7 @@
 #include <kern/cpu.h>
 #include <kern/spinlock.h>
 
+
 static struct Taskstate ts;
 
 /* For debugging, so print_trapframe can distinguish between printing
@@ -25,11 +27,14 @@ static struct Trapframe *last_tf;
 /* Interrupt descriptor table.  (Must be built at run time because
  * shifted function addresses can't be represented in relocation records.)
  */
+extern uint32_t vectors[];
 struct Gatedesc idt[256] = { { 0 } };
 struct Pseudodesc idt_pd = {
 	sizeof(idt) - 1, (uint32_t) idt
 };
 
+void breakpoint_handler(struct Trapframe *tf);
+void syscall_handler(struct Trapframe *tf);
 
 static const char *trapname(int trapno)
 {
@@ -70,10 +75,17 @@ void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
-
 	// LAB 3: Your code here.
+	int i;
+	for(i = 0; i < 256; i++){
+		if (i==T_BRKPT || i == T_SYSCALL){
+			// allow user to set breakpoint
+			SETGATE(idt[i], 0, GD_KT, vectors[i], 3);
+			continue;
+		}
+		SETGATE(idt[i], 0, GD_KT, vectors[i], 0);
 
-	// Per-CPU setup 
+	}// Per-CPU setup
 	trap_init_percpu();
 }
 
@@ -103,23 +115,36 @@ trap_init_percpu(void)
 	// user space on that CPU.
 	//
 	// LAB 4: Your code here:
-
-	// Setup a TSS so that we get the right stack
-	// when we trap to the kernel.
-	ts.ts_esp0 = KSTACKTOP;
-	ts.ts_ss0 = GD_KD;
+	assert(thiscpu->cpu_id == cpunum());
+	size_t i = cpunum();
+	cpus[i].cpu_ts.ts_esp0 = KSTACKTOP-i*(KSTKSIZE+KSTKGAP);
+	cpus[i].cpu_ts.ts_ss0 = GD_KD;
 
 	// Initialize the TSS slot of the gdt.
-	gdt[GD_TSS0 >> 3] = SEG16(STS_T32A, (uint32_t) (&ts),
-					sizeof(struct Taskstate), 0);
-	gdt[GD_TSS0 >> 3].sd_s = 0;
+	gdt[(GD_TSS0 >> 3)+i] = SEG16(STS_T32A, (uint32_t) (&cpus[i].cpu_ts),
+						sizeof(struct Taskstate), 0);
+	gdt[(GD_TSS0 >> 3)+i].sd_s = 0;
 
 	// Load the TSS selector (like other segment selectors, the
 	// bottom three bits are special; we leave them 0)
-	ltr(GD_TSS0);
-
+	ltr(GD_TSS0+8*i);
 	// Load the IDT
 	lidt(&idt_pd);
+
+
+	/*
+	ts.ts_esp0 = KSTACKTOP;
+	ts.ts_ss0 = GD_KD;
+	// Initialize the TSS slot of the gdt.
+	gdt[GD_TSS0 >> 3] = SEG16(STS_T32A, (uint32_t) (&ts),
+	sizeof(struct Taskstate), 0);
+	gdt[GD_TSS0 >> 3].sd_s = 0;
+	// Load the TSS selector (like other segment selectors, the
+	// bottom three bits are special; we leave them 0)
+	ltr(GD_TSS0);
+	// Load the IDT
+	lidt(&idt_pd);
+	*/
 }
 
 void
@@ -191,12 +216,31 @@ trap_dispatch(struct Trapframe *tf)
 	// LAB 5: Your code here.
 
 	// Unexpected trap: The user process or the kernel has a bug.
-	print_trapframe(tf);
-	if (tf->tf_cs == GD_KT)
-		panic("unhandled trap in kernel");
-	else {
-		env_destroy(curenv);
-		return;
+	//cprintf("CPU=%d, envid=%d, trapno=%d\n",cpunum(),curenv->env_id, tf->tf_trapno);
+	//print_trapframe(tf);
+	switch(tf->tf_trapno){
+		case IRQ_OFFSET+0:
+			lapic_eoi();
+			sched_yield();
+			break;
+		case T_BRKPT:
+			breakpoint_handler(tf);
+			break;
+		case T_PGFLT:
+			page_fault_handler(tf);
+			break;
+		case T_SYSCALL:
+			syscall_handler(tf);
+			break;
+		default:
+			print_trapframe(tf);
+			if (tf->tf_cs == GD_KT)
+				panic("unhandled trap in kernel\n");
+			else {
+				env_destroy(curenv);
+				return;
+			}
+			break;
 	}
 }
 
@@ -226,6 +270,7 @@ trap(struct Trapframe *tf)
 		// Acquire the big kernel lock before doing any
 		// serious kernel work.
 		// LAB 4: Your code here.
+		lock_kernel();
 		assert(curenv);
 
 		// Garbage collect if current enviroment is a zombie
@@ -260,6 +305,25 @@ trap(struct Trapframe *tf)
 }
 
 
+void syscall_handler(struct Trapframe *tf)
+{
+	//print_trapframe(tf);
+	uint32_t syscallno = tf->tf_regs.reg_eax;
+	uint32_t a1 = tf->tf_regs.reg_edx;
+	uint32_t a2 = tf->tf_regs.reg_ecx;
+	uint32_t a3 = tf->tf_regs.reg_ebx;
+	uint32_t a4 = tf->tf_regs.reg_edi;
+	uint32_t a5 = tf->tf_regs.reg_esi;
+	tf->tf_regs.reg_eax = syscall(syscallno, a1, a2, a3, a4, a5);
+
+}
+
+void
+breakpoint_handler(struct Trapframe *tf)
+{
+	monitor(tf);
+	return;
+}
 void
 page_fault_handler(struct Trapframe *tf)
 {
@@ -267,10 +331,12 @@ page_fault_handler(struct Trapframe *tf)
 
 	// Read processor's CR2 register to find the faulting address
 	fault_va = rcr2();
-
 	// Handle kernel-mode page faults.
-
 	// LAB 3: Your code here.
+	//print_trapframe(tf);
+
+	if (tf->tf_cs == GD_KT)
+		panic("unhandled page fault in kernel");
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
@@ -304,11 +370,45 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	//print_trapframe(tf);
+	if(!curenv->env_pgfault_upcall){
+		// Destroy the environment that caused the fault.
+		cprintf("[%08x] user fault va %08x ip %08x\n",
+			curenv->env_id, fault_va, tf->tf_eip);
+		print_trapframe(tf);
+		env_destroy(curenv);
+	}
 
-	// Destroy the environment that caused the fault.
-	cprintf("[%08x] user fault va %08x ip %08x\n",
-		curenv->env_id, fault_va, tf->tf_eip);
-	print_trapframe(tf);
-	env_destroy(curenv);
+	if (curenv->env_pgfault_upcall){
+		uint32_t stacktop;
+		struct UTrapframe* uxstack = NULL;
+		if ( tf->tf_esp < UXSTACKTOP && tf->tf_esp >= UXSTACKTOP-PGSIZE)
+		{
+			//memset((void *)(tf->tf_esp-2), 0, 2);
+			stacktop = tf->tf_esp-4;
+		}
+		else
+			stacktop = UXSTACKTOP;
+
+		// assert user has perm to write on exception stack
+		user_mem_assert(curenv, (const void *) (stacktop-sizeof(*uxstack)),
+						sizeof(*uxstack), PTE_W|PTE_U);
+
+		uxstack = (struct UTrapframe*) (stacktop-sizeof(*uxstack));
+
+		uxstack->utf_esp = tf->tf_esp;
+		uxstack->utf_eflags = tf->tf_eflags;
+		uxstack->utf_eip = tf->tf_eip;
+		memmove(&(uxstack->utf_regs), &(tf->tf_regs), sizeof(tf->tf_regs));
+		uxstack->utf_err = tf->tf_err;
+		uxstack->utf_fault_va = fault_va;
+
+		curenv->env_tf.tf_eip = (uint32_t) curenv->env_pgfault_upcall;
+		curenv->env_tf.tf_esp = (uint32_t) (uxstack);
+		//cprintf("modified tf\n");
+		//print_trapframe(tf);
+		//panic("");
+		env_run(curenv);
+	}
 }
 

@@ -75,6 +75,7 @@ spin_lock(struct spinlock *lk)
 #ifdef DEBUG_SPINLOCK
 	lk->cpu = thiscpu;
 	get_caller_pcs(lk->pcs);
+	//cprintf("%d accquire spin lock\n", cpunum());
 #endif
 }
 
@@ -116,5 +117,6 @@ spin_unlock(struct spinlock *lk)
 	// after a store. So lock->locked = 0 would work here.
 	// The xchg being asm volatile ensures gcc emits it after
 	// the above assignments (and after the critical section).
+	//cprintf("%d unlock spin lock\n", cpunum());
 	xchg(&lk->locked, 0);
 }
