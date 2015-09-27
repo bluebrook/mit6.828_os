@@ -34,18 +34,17 @@ sched_yield(void)
 	size_t i;
 	size_t offset = 0;
 	if (curenv)
-		offset = (curenv - envs)/sizeof(struct Env)+1;
+		offset = (curenv - envs)/sizeof(struct Env);
 	struct Env * e, * e_running = NULL;
-	//cprintf("envs = %8x, curenv=%8x\n", envs, curenv);
 
-	for (i = 0; i < NENV; i++) {
+	/*
+	for (i = 0; i < 100; i++) {
+		if ((envs[i].env_status == ENV_RUNNING))
+			cprintf("%d is running on CPU=%d\n", i, envs[i].env_cpunum);
 		if ((envs[i].env_status == ENV_RUNNABLE))
-			cprintf("envid=%d is running on CPU =%d\n",i,envs[i].env_cpunum);
-		else if ((envs[i].env_status == ENV_RUNNABLE))
-			cprintf("envid=%d is runnable\n",i);
+			cprintf("%d is runnable on CPU=%d\n", i, envs[i].env_cpunum);
 	}
-
-
+	*/
 	for (i=0; i<NENV; i++){
 		e = envs+ (offset + i) % NENV;
 		//cprintf("loop i: %d, envs = %8x, e =%8x\n", i, envs, e);
@@ -56,7 +55,7 @@ sched_yield(void)
 		}
 	}
 
-	if (curenv && curenv->env_status == ENV_RUNNING)
+	if (curenv && curenv->env_status == ENV_RUNNING && curenv->env_cpunum == cpunum())
 		env_run(curenv);
 
 	sched_halt();

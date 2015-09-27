@@ -85,7 +85,7 @@ pgfault(struct UTrapframe *utf)
 	if( (r=sys_page_unmap(0, (void*)PFTEMP)) < 0 )
 		panic("failed in unmap temp page\n");
 
-	cprintf("pg_fault fixed\n");
+	//cprintf("pg_fault fixed\n");
 	//panic("pgfault not implemented");
 }
 
@@ -243,7 +243,7 @@ fork(void)
 										thisenv->env_pgfault_upcall)) < 0)
 		panic("error in fork(), sys_env_set_pgfault_upcall: %e\n", r);
 
-	cprintf("I am env: %d, forked child env %d\n", sys_getenvid(), envid);
+	//cprintf("I am env: %d, forked child env %d\n", sys_getenvid(), envid);
 	// Start the child environment running
 	if ((r = sys_env_set_status(envid, ENV_RUNNABLE)) < 0)
 		panic("sys_env_set_status: %e", r);

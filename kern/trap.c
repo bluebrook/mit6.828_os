@@ -213,8 +213,8 @@ trap_dispatch(struct Trapframe *tf)
 	// LAB 4: Your code here.
 
 	// Unexpected trap: The user process or the kernel has a bug.
-	cprintf("CPU=%d, envid=%d, trapno=%d\n",cpunum(),curenv->env_id, tf->tf_trapno);
-	print_trapframe(tf);
+	//cprintf("CPU=%d, envid=%d, trapno=%d\n",cpunum(),curenv->env_id, tf->tf_trapno);
+	//print_trapframe(tf);
 	switch(tf->tf_trapno){
 		case IRQ_OFFSET+0:
 			lapic_eoi();
