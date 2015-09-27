@@ -22,9 +22,7 @@ umain(int argc, char **argv)
 	// Wait for the parent to finish forking
 	while (envs[ENVX(parent)].env_status != ENV_FREE)
 	{
-		cprintf("parents status: %d\n", envs[ENVX(parent)].env_status);
 		asm volatile("pause");
-		//sys_yield();
 	}
 	// Check that one environment doesn't run on two CPUs at once
 	for (i = 0; i < 10; i++) {
