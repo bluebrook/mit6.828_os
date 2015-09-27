@@ -85,6 +85,7 @@ pgfault(struct UTrapframe *utf)
 	if( (r=sys_page_unmap(0, (void*)PFTEMP)) < 0 )
 		panic("failed in unmap temp page\n");
 
+	cprintf("pg_fault fixed\n");
 	//panic("pgfault not implemented");
 }
 
@@ -215,7 +216,7 @@ fork(void)
 		return 0;
 	}
 
-	cprintf("number of pages: %d , %d\n", UTOP/(PGSIZE), PGNUM(UTOP));
+	//cprintf("number of pages: %d , %d\n", UTOP/(PGSIZE), PGNUM(UTOP));
 
 	size_t pn;
 	for(pn=0; pn < PGNUM(UTOP); pn++)

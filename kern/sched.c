@@ -38,6 +38,14 @@ sched_yield(void)
 	struct Env * e, * e_running = NULL;
 	//cprintf("envs = %8x, curenv=%8x\n", envs, curenv);
 
+	for (i = 0; i < NENV; i++) {
+		if ((envs[i].env_status == ENV_RUNNABLE))
+			cprintf("envid=%d is running on CPU =%d\n",i,envs[i].env_cpunum);
+		else if ((envs[i].env_status == ENV_RUNNABLE))
+			cprintf("envid=%d is runnable\n",i);
+	}
+
+
 	for (i=0; i<NENV; i++){
 		e = envs+ (offset + i) % NENV;
 		//cprintf("loop i: %d, envs = %8x, e =%8x\n", i, envs, e);

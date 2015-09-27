@@ -213,9 +213,13 @@ trap_dispatch(struct Trapframe *tf)
 	// LAB 4: Your code here.
 
 	// Unexpected trap: The user process or the kernel has a bug.
-	//tf->tf_trapno = 3;
-
+	cprintf("CPU=%d, envid=%d, trapno=%d\n",cpunum(),curenv->env_id, tf->tf_trapno);
+	print_trapframe(tf);
 	switch(tf->tf_trapno){
+		case IRQ_OFFSET+0:
+			lapic_eoi();
+			sched_yield();
+			break;
 		case T_BRKPT:
 			breakpoint_handler(tf);
 			break;
@@ -363,6 +367,7 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	//print_trapframe(tf);
 	if(!curenv->env_pgfault_upcall){
 		// Destroy the environment that caused the fault.
 		cprintf("[%08x] user fault va %08x ip %08x\n",
