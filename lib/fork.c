@@ -117,7 +117,13 @@ duppage(envid_t envid, unsigned pn)
 
 	int perm = PTE_P|PTE_U;
 
-	if ( (pte&PTE_W) == PTE_W || (pte&PTE_COW) == PTE_COW )
+	if ((pte & PTE_SHARE) == PTE_SHARE )
+	{
+		if( (r=sys_page_map(0, addr, envid, addr, pte & PTE_SYSCALL))<0)
+			panic("failed in child page mapping\n");
+		// change myself to COW too
+	}
+	else if ( (pte&PTE_W) == PTE_W || (pte&PTE_COW) == PTE_COW )
 	{
 		// change both to PTE_COW type
 		perm |= PTE_COW;

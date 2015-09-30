@@ -88,7 +88,7 @@ spawn(const char *prog, const char **argv)
 	if ((r = open(prog, O_RDONLY)) < 0)
 		return r;
 	fd = r;
-
+	cprintf("return fd: %d", fd);
 	// Read elf header
 	elf = (struct Elf*) elf_buf;
 	if (readn(fd, elf_buf, sizeof(elf_buf)) != sizeof(elf_buf)
@@ -301,6 +301,23 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
+	size_t pn;
+	int r=0;
+	for(pn=0; pn < PGNUM(UTOP); pn++)
+	{
+		// uvpd + pn this address may not be present
+		if ((uvpd[PDX(pn<<PGSHIFT)] & (PTE_P|PTE_U)) != (PTE_P|PTE_U))
+			continue;
+
+		if( (uvpt[pn] & (PTE_P|PTE_U|PTE_SHARE)) == (PTE_P|PTE_U|PTE_SHARE)){
+			if( (r=sys_page_map(0,
+								(void *) (pn*PGSIZE),
+								child,
+								(void *) (pn*PGSIZE),
+								uvpt[pn] & PTE_SYSCALL))<0)
+				panic("failed in child page mapping\n");
+		}
+	}
 	return 0;
 }
 

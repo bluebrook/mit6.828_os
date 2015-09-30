@@ -33,7 +33,17 @@ bc_pgfault(struct UTrapframe *utf)
 	// Hint: first round addr to page boundary.
 	//
 	// LAB 5: you code here:
+	void * start_addr = ROUNDDOWN(addr, PGSIZE);
+	/*cprintf("fault_va=0x%8x, load disk block no %d to start addr 0x%8x\n",
+			addr,
+		    blockno,
+		    start_addr);*/
+	int i=0;
+	if ((r=sys_page_alloc(0, start_addr, PTE_P|PTE_U|PTE_W))<0)
+		panic("failed to alloc a physical page\n");
 
+	if ((r=ide_read(blockno*BLKSECTS, start_addr, BLKSECTS)!=0))
+		panic("failed in read in sect %d, return code %d", i, r);
 }
 
 

@@ -740,18 +740,18 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 	pte_t * upgdir = env->env_pgdir;
 
 
-	size_t i;
-	for(i= 0;i <= ROUNDUP(va+len, PGSIZE)-va; i += PGSIZE)
+	size_t i =0;
+	for(;i < ROUNDUP(va+len, PGSIZE)-va; i += PGSIZE)
 	{
 		if (i==0)
-			user_mem_check_addr = (uint32_t)(va+i);
+			user_mem_check_addr = (uint32_t)(va);
 		else
 			user_mem_check_addr = ROUNDDOWN((uint32_t)(va+i), PGSIZE);
 		if ((va + i) >= (void*) ULIM && i <= len)
-			return -1;
+			return -E_FAULT;
 		pte_t *ptep = pgdir_walk(upgdir, va+i, 0);
 		if (!ptep || (*ptep & perm)!= perm )
-			return -1;
+			return -E_FAULT;
 	}
 
 	return 0;
